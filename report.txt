@@ -1,0 +1,35 @@
+﻿--Modeling the Virtual Memory Simulator--
+Our simulator has classes to represent each of the functional units: the backing store, the physical memory, the page table, the translation lookaside buffer (TLB), and each of the page replacement algorithms (PRAs). Having them in classes allows us to represent various hardware features and device managers as fields or methods.
+
+
+--The Backing Store--
+The backing store simply holds a reference to a “BACKING_STORE.bin” binary file and has a method to read the nth 256-byte chunk as a binary string.
+
+
+--The Physical Memory--
+The physical memory holds an array of strings, where the length of the array is passed in as a frame count parameter, and the strings are initialized to 256 0x00 bytes. The class has three methods. The first takes in a frame number and offset and returns the single byte at that address as a signed integer. The second takes in a frame number and returns the entire frame. This is probably not meant to represent any aspect of typical memory access, but it saves us looping through the entire frame for our output. The third method takes in a frame number and a binary string, presumably one read from the backing store, and writes the string to the frame.
+
+
+--The Page Table--
+The page table is implemented as a structure that maps logical pages to physical frames, playing a crucial role in translating addresses. The page table’s size is set based on the total number of pages, with each entry containing the frame number and a loaded bit that indicates whether the page is currently loaded into physical memory.
+Our PageTable class has several methods to manage this translation. The load_frame method maps a logical page to a specified physical frame and updates the loaded bit, indicating the page is active in memory. This setup allows the system to quickly determine if a logical page has a corresponding frame in physical memory.
+The unload_frame method clears the loaded bit for a page when it is removed from memory, freeing up space for new pages. The is_loaded method checks if a page is currently in physical memory, providing a quick reference for address translation and reducing page faults.
+Finally, get_frame retrieves the physical frame for a given logical page if it is loaded, or returns -1 if it is not. This structure and these methods simulate the real-life functionality of a page table, supporting efficient memory management and address translation.
+
+
+--TLB--
+The TLB (Translation Lookaside Buffer) is a fast-access cache that stores recent page-to-frame mappings, reducing lookup time for frequently accessed pages. Our TLB is implemented as a 16-entry FIFO buffer, where entries are replaced in the order of insertion, mimicking real-world cache behavior to prioritize quick access to frequently used pages. Each entry in the TLB is a logical-to-physical page mapping tuple, allowing for fast lookups. The TLB uses a pointer to track the oldest entry, facilitating efficient FIFO replacement when adding new mappings.
+The get_frame method checks if a logical page is in the TLB. If found, it returns the associated frame number, bypassing the page table; otherwise, it returns -1, signaling a TLB miss. The add_page method inserts a new mapping and removes the oldest entry if necessary, keeping the TLB up to date with recent access patterns. The remove_page and remove_frame methods clear outdated mappings, ensuring synchronization between the TLB and physical memory.
+
+
+--PRAs--
+The page replacement algorithms are also classes, such that the main function can initialize an instance of the appropriate algorithm and use the identically formatted methods to find the next frame to write to or replace. They also all have a method that main calls every time it identifies the next page to be accessed, which the algorithms may need for various reasons.
+The FIFO class is initialized with only the number of frames. It stores a number identifying the oldest frame. It does nothing when a page is identified, and its method to find the next victim just returns the oldest frame and rotates the number to the next oldest frame.
+The LRU class is initialized with the number of frames and a reference to the page table. It makes an empty list that will accumulate the access history. When a next page is identified, it appends that page number to the history. We did not give its “next” method any arguments, so it works as follows: it creates an inverted list out of the page table, with pages indexed by frames. It returns the number of an empty frame if one exists. If not, it runs backwards through the access history, clearing pages from the inverted list and counting down. When the countdown reaches zero, that is, when there are no more pages to clear, this indicates that the page most recently cleared was the least recently used. It thus returns the frame number that page was stored in. 
+The OPT is initialized with the number of frames, a reference to the page table, and the path to a file which it parses the reference string from. It also stores a number that tracks its progress through that reference string. When a next page is identified, it increments that number. Its “next” method is similar to that of LRU, except it searches forwards through the ref string instead of through the history. Also, if the countdown reaches zero, ie if multiple pages will never be used again, it simply returns the frame housing the first such page.
+
+
+--The Main Function--
+The main function orchestrates the virtual memory simulation by managing interactions between the TLB, page table, physical memory, backing store, and the selected page replacement algorithm. It begins by reading command-line arguments that define the reference sequence file, frame count, and page replacement strategy (FIFO, LRU, or OPT), allowing for customizable memory management setups. The function then initializes key components and selects the appropriate page replacement algorithm to use in the simulation.
+The core of the simulation occurs in a loop, where each logical address from the reference file is processed. First, the address is divided into a page number and offset, representing the memory translation process in virtual memory systems. The function checks the TLB for this page; a TLB hit provides the physical frame directly, bypassing the page table for faster access. If the TLB misses, the page table is checked. A page fault occurs if neither holds the mapping, prompting the function to retrieve the page from the backing store. In such cases, the selected page replacement algorithm determines which frame to write the new page into.
+After loading the page, the new mapping is added to both the TLB and page table to optimize future access. The loop continues this process for each address, while tracking TLB hits, TLB misses, and page faults in order to assess the performance and efficiency of the PRAs.
